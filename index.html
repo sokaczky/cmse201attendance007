@@ -5,88 +5,128 @@
 <title>Attendance</title>
 
 <style>
-body {
-  background:#0f172a;
-  color:white;
-  font-family: system-ui;
-  padding:20px;
-}
-
-.group {
-  margin-bottom:30px;
-}
-
-.group h2 {
-  background:#065f46;
-  padding:12px;
-  border-radius:20px;
-  width:200px;
-  text-align:center;
-}
-
-.student {
-  padding:10px;
-  margin:6px 0;
-  border-radius:10px;
-  background:#1e293b;
-  cursor:pointer;
-}
-
-.student.present {
-  background:#047857;
-}
-
-button {
-  padding:10px 16px;
-  border-radius:12px;
-  border:none;
-  background:#2563eb;
-  color:white;
-  cursor:pointer;
-}
+  body { background:#0f172a; color:white; font-family: system-ui; padding:20px; }
+  .controls { background: #1e293b; padding: 20px; border-radius: 15px; margin-bottom: 20px; display: flex; gap: 15px; align-items: center; flex-wrap: wrap; }
+  .group { margin-bottom:30px; }
+  .group h2 { background:#065f46; padding:12px; border-radius:20px; width:200px; text-align:center; margin-bottom: 15px; }
+  .student { display:flex; align-items:center; gap:10px; padding:10px; margin:6px 0; border-radius:10px; background:#1e293b; transition: 0.2s; }
+  .student:hover { background: #334155; }
+  button { padding:10px 16px; border-radius:12px; border:none; background:#2563eb; color:white; cursor:pointer; font-weight: bold; }
+  button.secondary { background: #475569; }
+  input[type="file"] { color: #94a3b8; font-size: 0.9rem; }
+  #date { font-size: 1.2rem; font-weight: bold; color: #38bdf8; }
 </style>
 </head>
 
 <body>
 
-<h1>Attendance</h1>
+<h1>Attendance Tracker</h1>
 <p id="date"></p>
 
-<button onclick="exportCSV()">Export CSV</button>
-
-<div class="group">
-  <h2>GROUP 1</h2>
-  <div class="student" onclick="toggle(this,'001','Alex Smith')">Smith, Alex</div>
-  <div class="student" onclick="toggle(this,'002','Jamie Lee')">Lee, Jamie</div>
+<div class="controls">
+  <div>
+    <label style="display:block; margin-bottom:5px; font-size:0.8rem;">Upload Classlist (CSV)</label>
+    <input type="file" id="csvFile" accept=".csv">
+  </div>
+  <button onclick="exportAttendance()">Export Today's Attendance</button>
+  <button class="secondary" onclick="clearData()">Clear Saved Classlist</button>
 </div>
 
-<div class="group">
-  <h2>GROUP 4</h2>
-  <div class="student" onclick="toggle(this,'003','Morgan Patel')">Patel, Morgan</div>
-</div>
+<div id="groups"></div>
 
 <script>
 const today = new Date().toISOString().slice(0,10);
-document.getElementById("date").innerText = today;
+document.getElementById("date").innerText = `Date: ${today}`;
 
-// Load saved state
-const attendance = JSON.parse(localStorage.getItem(today) || "{}");
-document.querySelectorAll(".student").forEach(el => {
-  const id = el.getAttribute("onclick").match(/'(\d+)'/)[1];
-  if (attendance[id]) el.classList.add("present");
+let students = JSON.parse(localStorage.getItem("classList") || "[]");
+let attendance = JSON.parse(localStorage.getItem(today) || "{}");
+
+// Initial Render
+renderList();
+
+// Listen for File Upload
+document.getElementById('csvFile').addEventListener('change', function(e) {
+  const file = e.target.files[0];
+  const reader = new FileReader();
+
+  reader.onload = function(event) {
+    const text = event.target.result;
+    parseCSV(text);
+  };
+
+  reader.readAsText(file);
 });
 
-function toggle(el, id, name) {
-  el.classList.toggle("present");
-  attendance[id] = el.classList.contains("present");
+function parseCSV(text) {
+  const lines = text.split('\n');
+  const result = [];
+  
+  // Skip header, loop through rows
+  for (let i = 1; i < lines.length; i++) {
+    const row = lines[i].split(',');
+    if (row.length >= 4) {
+      result.push({
+        id: row[0].trim(),
+        first: row[1].trim(),
+        last: row[2].trim(),
+        group: row[3].trim()
+      });
+    }
+  }
+
+  students = result;
+  localStorage.setItem("classList", JSON.stringify(students));
+  renderList();
+}
+
+function renderList() {
+  const container = document.getElementById("groups");
+  container.innerHTML = ""; // Clear existing
+
+  if (students.length === 0) {
+    container.innerHTML = "<p style='color:#94a3b8'>No students loaded. Please upload a CSV file with columns: id, first, last, group.</p>";
+    return;
+  }
+
+  // Grouping logic
+  const grouped = {};
+  students.forEach(s => {
+    if (!grouped[s.group]) grouped[s.group] = [];
+    grouped[s.group].push(s);
+  });
+
+  for (const group in grouped) {
+    const div = document.createElement("div");
+    div.className = "group";
+    div.innerHTML = `<h2>GROUP ${group}</h2>`;
+
+    grouped[group].forEach(s => {
+      const row = document.createElement("div");
+      row.className = "student";
+      const checked = attendance[s.id] ? "checked" : "";
+
+      row.innerHTML = `
+        <input type="checkbox" ${checked} onchange="toggle('${s.id}', this.checked)">
+        <span>${s.last}, ${s.first} <small style="color:#64748b">(${s.id})</small></span>
+      `;
+      div.appendChild(row);
+    });
+    container.appendChild(div);
+  }
+}
+
+function toggle(id, present) {
+  attendance[id] = present;
   localStorage.setItem(today, JSON.stringify(attendance));
 }
 
-function exportCSV() {
-  let csv = "StudentID,Date,Present\n";
-  for (const id in attendance) {
-    csv += `${id},${today},${attendance[id] ? 1 : 0}\n`;
-  }
+function exportAttendance() {
+  if (students.length === 0) return alert("No students to export!");
+  
+  let csv = "StudentID,First,Last,Group,Date,Present\n";
+  students.forEach(s => {
+    csv += `${s.id},${s.first},${s.last},${s.group},${today},${attendance[s.id] ? 1 : 0}\n`;
+  });
 
   const blob = new Blob([csv], {type:"text/csv"});
   const link = document.createElement("a");
@@ -94,8 +134,14 @@ function exportCSV() {
   link.download = `attendance_${today}.csv`;
   link.click();
 }
+
+function clearData() {
+  if(confirm("Clear the classlist? You will need to re-upload your CSV.")) {
+    localStorage.removeItem("classList");
+    location.reload();
+  }
+}
 </script>
 
 </body>
 </html>
-
