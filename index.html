@@ -1,1 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Attendance</title>
+
+<style>
+body {
+  background:#0f172a;
+  color:white;
+  font-family: system-ui;
+  padding:20px;
+}
+
+.group {
+  margin-bottom:30px;
+}
+
+.group h2 {
+  background:#065f46;
+  padding:12px;
+  border-radius:20px;
+  width:200px;
+  text-align:center;
+}
+
+.student {
+  padding:10px;
+  margin:6px 0;
+  border-radius:10px;
+  background:#1e293b;
+  cursor:pointer;
+}
+
+.student.present {
+  background:#047857;
+}
+
+button {
+  padding:10px 16px;
+  border-radius:12px;
+  border:none;
+  background:#2563eb;
+  color:white;
+  cursor:pointer;
+}
+</style>
+</head>
+
+<body>
+
+<h1>Attendance</h1>
+<p id="date"></p>
+
+<button onclick="exportCSV()">Export CSV</button>
+
+<div class="group">
+  <h2>GROUP 1</h2>
+  <div class="student" onclick="toggle(this,'001','Alex Smith')">Smith, Alex</div>
+  <div class="student" onclick="toggle(this,'002','Jamie Lee')">Lee, Jamie</div>
+</div>
+
+<div class="group">
+  <h2>GROUP 4</h2>
+  <div class="student" onclick="toggle(this,'003','Morgan Patel')">Patel, Morgan</div>
+</div>
+
+<script>
+const today = new Date().toISOString().slice(0,10);
+document.getElementById("date").innerText = today;
+
+// Load saved state
+const attendance = JSON.parse(localStorage.getItem(today) || "{}");
+document.querySelectorAll(".student").forEach(el => {
+  const id = el.getAttribute("onclick").match(/'(\d+)'/)[1];
+  if (attendance[id]) el.classList.add("present");
+});
+
+function toggle(el, id, name) {
+  el.classList.toggle("present");
+  attendance[id] = el.classList.contains("present");
+  localStorage.setItem(today, JSON.stringify(attendance));
+}
+
+function exportCSV() {
+  let csv = "StudentID,Date,Present\n";
+  for (const id in attendance) {
+    csv += `${id},${today},${attendance[id] ? 1 : 0}\n`;
+  }
+
+  const blob = new Blob([csv], {type:"text/csv"});
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = `attendance_${today}.csv`;
+  link.click();
+}
+</script>
+
+</body>
+</html>
 
