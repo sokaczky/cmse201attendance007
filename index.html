@@ -3,7 +3,6 @@
 <head>
 <meta charset="UTF-8">
 <title>Attendance</title>
-
 <style>
   body { background:#0f172a; color:white; font-family: system-ui; padding:20px; }
   .controls { background: #1e293b; padding: 20px; border-radius: 15px; margin-bottom: 20px; display: flex; gap: 15px; align-items: center; }
@@ -15,7 +14,6 @@
   .status { font-size: 0.8rem; color: #94a3b8; }
 </style>
 </head>
-
 <body>
 
 <h1>Attendance Tracker</h1>
@@ -23,7 +21,7 @@
 
 <div class="controls">
   <button onclick="exportAttendance()">Export Today's CSV</button>
-  <span id="loadStatus" class="status">Loading classlist...</span>
+  <span id="loadStatus" class="status">Checking for classlist.csv...</span>
 </div>
 
 <div id="groups"></div>
@@ -35,26 +33,24 @@ document.getElementById("date").innerText = `Date: ${today}`;
 let students = [];
 let attendance = JSON.parse(localStorage.getItem(today) || "{}");
 
-// 1. AUTOMATICALLY FETCH THE CSV FILE
+// Fetch the CSV from your GitHub repo
 fetch('classlist.csv')
   .then(response => {
-    if (!response.ok) throw new Error("Could not find classlist.csv");
+    if (!response.ok) throw new Error("File not found");
     return response.text();
   })
   .then(csvText => {
     parseCSV(csvText);
-    document.getElementById('loadStatus').innerText = "Classlist loaded from GitHub";
+    document.getElementById('loadStatus').innerText = "✅ Classlist loaded";
   })
   .catch(err => {
-    document.getElementById('loadStatus').innerText = "Error: Make sure classlist.csv exists in your repo.";
-    console.error(err);
+    document.getElementById('loadStatus').innerText = "❌ Error: classlist.csv not found in repo.";
   });
 
 function parseCSV(text) {
   const lines = text.trim().split('\n');
   const result = [];
   
-  // Skip header, loop through rows
   for (let i = 1; i < lines.length; i++) {
     const row = lines[i].split(',');
     if (row.length >= 4) {
@@ -118,6 +114,5 @@ function exportAttendance() {
   link.click();
 }
 </script>
-
 </body>
 </html>
