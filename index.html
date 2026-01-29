@@ -2,17 +2,18 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Attendance</title>
+<title>Attendance Tracker</title>
 <style>
   body { background:#0f172a; color:white; font-family: system-ui; padding:20px; }
-  .controls { background: #1e293b; padding: 20px; border-radius: 15px; margin-bottom: 20px; display: flex; gap: 15px; align-items: center; }
+  .controls { background: #1e293b; padding: 20px; border-radius: 15px; margin-bottom: 20px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
   .group { margin-bottom:30px; }
-  .group h2 { background:#065f46; padding:12px; border-radius:20px; width:200px; text-align:center; margin-bottom: 15px; }
-  .student { display:flex; align-items:center; gap:10px; padding:10px; margin:6px 0; border-radius:10px; background:#1e293b; transition: 0.2s; }
-  .student:hover { background: #334155; }
+  .group h2 { background:#065f46; padding:12px; border-radius:20px; min-width:150px; text-align:center; margin-bottom: 15px; }
+  .student { display:flex; align-items:center; gap:10px; padding:12px; margin:6px 0; border-radius:10px; background:#1e293b; border: 1px solid #334155; }
   button { padding:10px 16px; border-radius:12px; border:none; background:#2563eb; color:white; cursor:pointer; font-weight: bold; }
+  button.submit-btn { background: #059669; }
   #date { font-size: 1.2rem; font-weight: bold; color: #38bdf8; }
   .status { font-size: 0.8rem; color: #94a3b8; }
+  input[type="checkbox"] { transform: scale(1.3); }
 </style>
 </head>
 <body>
@@ -21,86 +22,57 @@
 <p id="date"></p>
 
 <div class="controls">
-  <button onclick="exportAttendance()">Export Today's CSV</button>
-  <span id="loadStatus" class="status">Checking for classlist.csv...</span>
+  <button onclick="exportAttendance()">Download CSV (Manual)</button>
+  <button class="submit-btn" onclick="submitToGitHub()">Submit & Update GitHub</button>
+  <span id="loadStatus" class="status">Loading classlist...</span>
 </div>
 
 <div id="groups"></div>
 
 <script>
+// --- YOUR CONFIGURATION ---
+const GITHUB_USER = 'sokaczky'; 
+const GITHUB_REPO = 'cmse201attendance007'; 
+const BRANCH = 'main';
+// --------------------------
+
 const today = new Date().toISOString().slice(0,10);
 document.getElementById("date").innerText = `Date: ${today}`;
 
 let students = [];
 let attendance = JSON.parse(localStorage.getItem(today) || "{}");
 
-// Fetch the CSV from your GitHub repo
-fetch('classlist.csv')
-  .then(response => {
-    if (!response.ok) throw new Error("File not found");
-    return response.text();
-  })
-  .then(csvText => {
-    parseCSV(csvText);
-    document.getElementById('loadStatus').innerText = "✅ Classlist loaded";
-  })
-  .catch(err => {
-    document.getElementById('loadStatus').innerText = "❌ Error: classlist.csv not found in repo.";
-  });
+// Load the classlist from your repo
+fetch('classlist.csv?v=' + Date.now())
+  .then(r => r.text())
+  .then(text => { parseCSV(text); document.getElementById('loadStatus').innerText = "✅ Classlist loaded"; })
+  .catch(() => { document.getElementById('loadStatus').innerText = "❌ Error: classlist.csv not found"; });
 
 function parseCSV(text) {
-  // split by lines and filter out empty rows
-  const lines = text.trim().split('\n').filter(line => line.trim() !== "");
-  const result = [];
-  
-  // Starting at i = 1 to skip your header row (ID, First Name, Last Name, Group Number)
-  for (let i = 1; i < lines.length; i++) {
-    const row = lines[i].split(',');
-    if (row.length >= 4) {
-      result.push({
-        id: row[0].trim(),
-        first: row[1].trim(),
-        last: row[2].trim(),
-        group: row[3].trim()
-      });
-    }
-  }
-  students = result;
+  const cleanText = text.replace(/^\uFEFF/, ''); 
+  const lines = cleanText.split(/\r?\n/).filter(line => line.trim() !== "");
+  students = lines.slice(1).map(line => {
+    const r = line.split(',');
+    return { id: r[0]?.trim(), first: r[1]?.trim(), last: r[2]?.trim(), group: r[3]?.trim() };
+  }).filter(s => s.first);
   renderList();
 }
 
 function renderList() {
   const container = document.getElementById("groups");
   container.innerHTML = "";
-
-  if (students.length === 0) {
-    container.innerHTML = "<p>No students found in CSV.</p>";
-    return;
-  }
-
   const grouped = {};
-  students.forEach(s => {
-    if (!grouped[s.group]) grouped[s.group] = [];
-    grouped[s.group].push(s);
-  });
-
-  // Sort groups numerically
-  const groupKeys = Object.keys(grouped).sort((a, b) => a - b);
-
-  groupKeys.forEach(group => {
+  students.forEach(s => { if (!grouped[s.group]) grouped[s.group] = []; grouped[s.group].push(s); });
+  
+  Object.keys(grouped).sort((a,b)=>a-b).forEach(group => {
     const div = document.createElement("div");
     div.className = "group";
     div.innerHTML = `<h2>GROUP ${group}</h2>`;
-
     grouped[group].forEach(s => {
       const row = document.createElement("div");
       row.className = "student";
-      const checked = attendance[s.id] ? "checked" : "";
-
-      row.innerHTML = `
-        <input type="checkbox" ${checked} onchange="toggle('${s.id}', this.checked)">
-        <span>${s.last}, ${s.first} <small style="color:#64748b">(${s.id})</small></span>
-      `;
+      row.innerHTML = `<input type="checkbox" ${attendance[s.id]?'checked':''} onchange="toggle('${s.id}', this.checked)">
+                       <span><strong>${s.last}</strong>, ${s.first} <small style="color:#64748b; margin-left:10px;">#${s.id}</small></span>`;
       div.appendChild(row);
     });
     container.appendChild(div);
@@ -112,17 +84,66 @@ function toggle(id, present) {
   localStorage.setItem(today, JSON.stringify(attendance));
 }
 
-function exportAttendance() {
+function generateCSV() {
   let csv = "ID,First Name,Last Name,Group Number,Date,Present\n";
-  students.forEach(s => {
-    csv += `${s.id},${s.first},${s.last},${s.group},${today},${attendance[s.id] ? 1 : 0}\n`;
-  });
+  students.forEach(s => { csv += `${s.id},${s.first},${s.last},${s.group},${today},${attendance[s.id] ? 1 : 0}\n`; });
+  return csv;
+}
 
-  const blob = new Blob([csv], {type:"text/csv"});
+function exportAttendance() {
+  const blob = new Blob([generateCSV()], {type:"text/csv"});
   const link = document.createElement("a");
   link.href = URL.createObjectURL(blob);
   link.download = `attendance_${today}.csv`;
   link.click();
+}
+
+async function submitToGitHub() {
+  const status = document.getElementById('loadStatus');
+  const token = prompt("Enter your GitHub Personal Access Token:");
+  if (!token) return;
+
+  status.innerText = "⏳ Syncing with GitHub...";
+  
+  const path = `records/attendance_${today}.csv`;
+  const url = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/${path}`;
+
+  try {
+    // 1. Try to find the existing file to get its 'sha'
+    let sha = null;
+    const getResponse = await fetch(url, {
+      headers: { 'Authorization': `token ${token}` }
+    });
+    
+    if (getResponse.ok) {
+      const existingFileData = await getResponse.json();
+      sha = existingFileData.sha;
+    }
+
+    // 2. Push the new/updated content
+    const putResponse = await fetch(url, {
+      method: 'PUT',
+      headers: { 'Authorization': `token ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: `Attendance update for ${today}`,
+        content: btoa(unescape(encodeURIComponent(generateCSV()))), // Handles special characters safely
+        sha: sha, // If sha is null, GitHub creates a new file. If sha exists, it updates.
+        branch: BRANCH
+      })
+    });
+
+    if (putResponse.ok) {
+      status.innerText = "✅ Successfully saved to GitHub!";
+      alert(`Updated: records/attendance_${today}.csv`);
+    } else {
+      const errorData = await putResponse.json();
+      throw new Error(errorData.message);
+    }
+  } catch (e) {
+    console.error(e);
+    status.innerText = "❌ Failed to save.";
+    alert("Error: " + e.message);
+  }
 }
 </script>
 </body>
