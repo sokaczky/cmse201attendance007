@@ -6,15 +6,13 @@
 
 <style>
   body { background:#0f172a; color:white; font-family: system-ui; padding:20px; }
-  .controls { background: #1e293b; padding: 20px; border-radius: 15px; margin-bottom: 20px; display: flex; gap: 15px; align-items: center; flex-wrap: wrap; }
+  .controls { background: #1e293b; padding: 20px; border-radius: 15px; margin-bottom: 20px; display: flex; gap: 15px; align-items: center; }
   .group { margin-bottom:30px; }
   .group h2 { background:#065f46; padding:12px; border-radius:20px; width:200px; text-align:center; margin-bottom: 15px; }
-  .student { display:flex; align-items:center; gap:10px; padding:10px; margin:6px 0; border-radius:10px; background:#1e293b; transition: 0.2s; }
-  .student:hover { background: #334155; }
+  .student { display:flex; align-items:center; gap:10px; padding:10px; margin:6px 0; border-radius:10px; background:#1e293b; }
   button { padding:10px 16px; border-radius:12px; border:none; background:#2563eb; color:white; cursor:pointer; font-weight: bold; }
-  button.secondary { background: #475569; }
-  input[type="file"] { color: #94a3b8; font-size: 0.9rem; }
   #date { font-size: 1.2rem; font-weight: bold; color: #38bdf8; }
+  .status { font-size: 0.8rem; color: #94a3b8; }
 </style>
 </head>
 
@@ -24,12 +22,8 @@
 <p id="date"></p>
 
 <div class="controls">
-  <div>
-    <label style="display:block; margin-bottom:5px; font-size:0.8rem;">Upload Classlist (CSV)</label>
-    <input type="file" id="csvFile" accept=".csv">
-  </div>
-  <button onclick="exportAttendance()">Export Today's Attendance</button>
-  <button class="secondary" onclick="clearData()">Clear Saved Classlist</button>
+  <button onclick="exportAttendance()">Export Today's CSV</button>
+  <span id="loadStatus" class="status">Loading classlist...</span>
 </div>
 
 <div id="groups"></div>
@@ -38,27 +32,26 @@
 const today = new Date().toISOString().slice(0,10);
 document.getElementById("date").innerText = `Date: ${today}`;
 
-let students = JSON.parse(localStorage.getItem("classList") || "[]");
+let students = [];
 let attendance = JSON.parse(localStorage.getItem(today) || "{}");
 
-// Initial Render
-renderList();
-
-// Listen for File Upload
-document.getElementById('csvFile').addEventListener('change', function(e) {
-  const file = e.target.files[0];
-  const reader = new FileReader();
-
-  reader.onload = function(event) {
-    const text = event.target.result;
-    parseCSV(text);
-  };
-
-  reader.readAsText(file);
-});
+// 1. AUTOMATICALLY FETCH THE CSV FILE
+fetch('classlist.csv')
+  .then(response => {
+    if (!response.ok) throw new Error("Could not find classlist.csv");
+    return response.text();
+  })
+  .then(csvText => {
+    parseCSV(csvText);
+    document.getElementById('loadStatus').innerText = "Classlist loaded from GitHub";
+  })
+  .catch(err => {
+    document.getElementById('loadStatus').innerText = "Error: Make sure classlist.csv exists in your repo.";
+    console.error(err);
+  });
 
 function parseCSV(text) {
-  const lines = text.split('\n');
+  const lines = text.trim().split('\n');
   const result = [];
   
   // Skip header, loop through rows
@@ -73,22 +66,14 @@ function parseCSV(text) {
       });
     }
   }
-
   students = result;
-  localStorage.setItem("classList", JSON.stringify(students));
   renderList();
 }
 
 function renderList() {
   const container = document.getElementById("groups");
-  container.innerHTML = ""; // Clear existing
+  container.innerHTML = "";
 
-  if (students.length === 0) {
-    container.innerHTML = "<p style='color:#94a3b8'>No students loaded. Please upload a CSV file with columns: id, first, last, group.</p>";
-    return;
-  }
-
-  // Grouping logic
   const grouped = {};
   students.forEach(s => {
     if (!grouped[s.group]) grouped[s.group] = [];
@@ -121,8 +106,6 @@ function toggle(id, present) {
 }
 
 function exportAttendance() {
-  if (students.length === 0) return alert("No students to export!");
-  
   let csv = "StudentID,First,Last,Group,Date,Present\n";
   students.forEach(s => {
     csv += `${s.id},${s.first},${s.last},${s.group},${today},${attendance[s.id] ? 1 : 0}\n`;
@@ -133,13 +116,6 @@ function exportAttendance() {
   link.href = URL.createObjectURL(blob);
   link.download = `attendance_${today}.csv`;
   link.click();
-}
-
-function clearData() {
-  if(confirm("Clear the classlist? You will need to re-upload your CSV.")) {
-    localStorage.removeItem("classList");
-    location.reload();
-  }
 }
 </script>
 
