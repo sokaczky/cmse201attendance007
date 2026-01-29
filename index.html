@@ -8,7 +8,8 @@
   .controls { background: #1e293b; padding: 20px; border-radius: 15px; margin-bottom: 20px; display: flex; gap: 15px; align-items: center; }
   .group { margin-bottom:30px; }
   .group h2 { background:#065f46; padding:12px; border-radius:20px; width:200px; text-align:center; margin-bottom: 15px; }
-  .student { display:flex; align-items:center; gap:10px; padding:10px; margin:6px 0; border-radius:10px; background:#1e293b; }
+  .student { display:flex; align-items:center; gap:10px; padding:10px; margin:6px 0; border-radius:10px; background:#1e293b; transition: 0.2s; }
+  .student:hover { background: #334155; }
   button { padding:10px 16px; border-radius:12px; border:none; background:#2563eb; color:white; cursor:pointer; font-weight: bold; }
   #date { font-size: 1.2rem; font-weight: bold; color: #38bdf8; }
   .status { font-size: 0.8rem; color: #94a3b8; }
@@ -48,9 +49,11 @@ fetch('classlist.csv')
   });
 
 function parseCSV(text) {
-  const lines = text.trim().split('\n');
+  // split by lines and filter out empty rows
+  const lines = text.trim().split('\n').filter(line => line.trim() !== "");
   const result = [];
   
+  // Starting at i = 1 to skip your header row (ID, First Name, Last Name, Group Number)
   for (let i = 1; i < lines.length; i++) {
     const row = lines[i].split(',');
     if (row.length >= 4) {
@@ -70,13 +73,21 @@ function renderList() {
   const container = document.getElementById("groups");
   container.innerHTML = "";
 
+  if (students.length === 0) {
+    container.innerHTML = "<p>No students found in CSV.</p>";
+    return;
+  }
+
   const grouped = {};
   students.forEach(s => {
     if (!grouped[s.group]) grouped[s.group] = [];
     grouped[s.group].push(s);
   });
 
-  for (const group in grouped) {
+  // Sort groups numerically
+  const groupKeys = Object.keys(grouped).sort((a, b) => a - b);
+
+  groupKeys.forEach(group => {
     const div = document.createElement("div");
     div.className = "group";
     div.innerHTML = `<h2>GROUP ${group}</h2>`;
@@ -93,7 +104,7 @@ function renderList() {
       div.appendChild(row);
     });
     container.appendChild(div);
-  }
+  });
 }
 
 function toggle(id, present) {
@@ -102,7 +113,7 @@ function toggle(id, present) {
 }
 
 function exportAttendance() {
-  let csv = "StudentID,First,Last,Group,Date,Present\n";
+  let csv = "ID,First Name,Last Name,Group Number,Date,Present\n";
   students.forEach(s => {
     csv += `${s.id},${s.first},${s.last},${s.group},${today},${attendance[s.id] ? 1 : 0}\n`;
   });
